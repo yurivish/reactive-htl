@@ -166,6 +166,11 @@ const svgForeignAttributes = new Map([
   ["xmlns:xlink", NS_XMLNS]
 ]);
 
+// Since the prefix can now wind up in value position in the DOM, choose one
+// that maximizes the chances of a successful parse. The default prefix, ::,
+// is not allowed as the value of the SVG width or viewBox attribute.
+const placeholderPrefix =  "::"
+
 export function hypertext(render, postprocess, isSpecial, processSpecial) {
   return function({raw: strings}) {
     let state = STATE_DATA;
@@ -203,7 +208,7 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
                 || value instanceof Node
                 || (typeof value !== "string" && value[Symbol.iterator])
                 || (/(?:^|>)$/.test(strings[j - 1]) && /^(?:<|$)/.test(input))) {
-              string += "<!--::" + j + "-->";
+              string += "<!--" + placeholderPrefix + j + "-->";
               nodeFilter |= SHOW_COMMENT;
             } else {
               string += `${value}`.replace(/[<&]/g, entity);
@@ -224,7 +229,7 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
               }
               const name = strings[j - 1].slice(attributeNameStart, attributeNameEnd);
               if (valueIsSpecial || (name === "style" && isObjectLiteral(value)) || typeof value === "function") {
-                string += "::" + j;
+                string += placeholderPrefix + j;
                 nodeFilter |= SHOW_ELEMENT;
                 break;
               }
@@ -248,7 +253,7 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
           }
           case STATE_BEFORE_ATTRIBUTE_NAME: {
             if (valueIsSpecial || isObjectLiteral(value)) {
-              string += "::" + j + "=''";
+              string += placeholderPrefix + j + "=''";
               nodeFilter |= SHOW_ELEMENT;
               break;
             }
@@ -545,6 +550,7 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
     const root = render(string);
 
     const walker = document.createTreeWalker(root, nodeFilter, null, false);
+    const placeholderPrefixRegex = new RegExp('^' + placeholderPrefix)
     const removeNodes = [];
     while (walker.nextNode()) {
       const node = walker.currentNode;
@@ -553,13 +559,13 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
           const attributes = node.attributes;
           for (let i = 0, n = attributes.length; i < n; ++i) {
             const {name, value: currentValue} = attributes[i];
-            if (/^::/.test(name)) {
-              const value = arguments[+name.slice(2)];
+            if (placeholderPrefixRegex.test(name)) {
+              const value = arguments[+name.slice(placeholderPrefix.length)];
               removeAttribute(node, name), --i, --n;
               if (isSpecial && isSpecial(value)) processSpecial(processAttrs, node, name, value, root);
               else processAttrs(node, name, value);
-            } else if (/^::/.test(currentValue)) {
-              const value = arguments[+currentValue.slice(2)];
+            } else if (placeholderPrefixRegex.test(currentValue)) {
+              const value = arguments[+currentValue.slice(placeholderPrefix.length)];
               removeAttribute(node, name), --i, --n;
               if (isSpecial && isSpecial(value)) processSpecial(processAttr, node, name, value, root);
               else processAttr(node, name, value);
@@ -568,9 +574,9 @@ export function hypertext(render, postprocess, isSpecial, processSpecial) {
           break;
         }
         case TYPE_COMMENT: {
-          if (/^::/.test(node.data)) {
+          if (placeholderPrefixRegex.test(node.data)) {
             const parent = node.parentNode;
-            const value = arguments[+node.data.slice(2)];
+            const value = arguments[+node.data.slice(placeholderPrefix.length)];
             if (isSpecial && isSpecial(value)) processSpecial(processChildren, node, name, value, root);
             else processChildren(node, parent, value);
             removeNodes.push(node);

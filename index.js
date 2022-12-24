@@ -63,6 +63,7 @@ function processSpecial(process, node, name, value, fragment) {
     // fall through, treating this as a case of processAttrs.
     case processAttr:
       value = { [name]: value };
+      // fallthrough
     case processAttrs:
       // cases:
       // - signal w/ attrs object
@@ -317,10 +318,10 @@ export function defineCustomElement(name, component, { shadowMode, observedAttri
   customElements.define(name, customElement(component, shadowMode, observedAttributes));
 }
 
-  // Creates something akin to an un-cached computed signal,
-  // which behaves as if its value is never equal to its
-  // previous value (it will always fire when a dependency is
-  // updated).
+// Creates something akin to an un-cached computed signal,
+// which behaves as if its value is never equal to its
+// previous value (it will always fire when a dependency is
+// updated).
 // First argument: compute function f(value); signal accesses are tracked
 // Second argument: initial value.
 // This is useful for maintaining a signal containing a
